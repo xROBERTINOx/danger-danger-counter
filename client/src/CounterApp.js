@@ -4,10 +4,45 @@ import io from 'socket.io-client';
 function CounterApp() {
   const [socket, setSocket] = useState(null);
   const [username, setUsername] = useState('');
+  const [gameId, setGameId] = useState('');
+  const [gameName, setGameName] = useState('');
   const [isConnected, setIsConnected] = useState(false);
-  const [counter, setCounter] = useState(0);
-  const [logs, setLogs] = useState([]);
   const [hasJoined, setHasJoined] = useState(false);
+  const [availableGames, setAvailableGames] = useState([]);
+  
+  // Game state
+  const [gameState, setGameState] = useState('waiting'); // 'waiting', 'playing', 'round-ended', 'game-ended'
+  const [players, setPlayers] = useState([]);
+  const [playerTeam, setPlayerTeam] = useState(null);
+  const [playerCard, setPlayerCard] = useState(null);
+  const [board, setBoard] = useState({
+    yellowPlayerCard: { number: 0, value: 0, team: 'yellow' },
+    yellowSharedCards: [
+      { number: 0, value: 0, team: 'yellow' },
+      { number: 0, value: 0, team: 'yellow' },
+      { number: 0, value: 0, team: 'yellow' }
+    ],
+    pinkSharedCards: [
+      { number: 0, value: 0, team: 'pink' },
+      { number: 0, value: 0, team: 'pink' },
+      { number: 0, value: 0, team: 'pink' }
+    ],
+    pinkPlayerCard: { number: 0, value: 0, team: 'pink' }
+  });
+  const [yellowScore, setYellowScore] = useState(0); // rounds won
+  const [pinkScore, setPinkScore] = useState(0); // rounds won
+  const [yellowTotalPoints, setYellowTotalPoints] = useState(0); // total points across all rounds
+  const [pinkTotalPoints, setPinkTotalPoints] = useState(0); // total points across all rounds
+  const [yellowCurrentPoints, setYellowCurrentPoints] = useState(0); // current round points
+  const [pinkCurrentPoints, setPinkCurrentPoints] = useState(0); // current round points
+  const [yellowTeamOut, setYellowTeamOut] = useState(false);
+  const [pinkTeamOut, setPinkTeamOut] = useState(false);
+  const [timeLeft, setTimeLeft] = useState(0);
+  const [logs, setLogs] = useState([]);
+  const [isReady, setIsReady] = useState(false);
+  const [allPlayersReady, setAllPlayersReady] = useState(false);
+  const [waitingForNextRound, setWaitingForNextRound] = useState(false);
+  const [lastRoundInfo, setLastRoundInfo] = useState(null);
 
   useEffect(() => {
     // Initialize socket connection
@@ -21,16 +56,187 @@ function CounterApp() {
       setIsConnected(true);
     });
 
-    newSocket.on('initial-state', (gameState) => {
-      console.log('Received initial state:', gameState);
-      setCounter(gameState.counter);
-      setLogs(gameState.logs);
+    newSocket.on('games-list', (games) => {
+      console.log('Received games list:', games);
+      setAvailableGames(games);
     });
 
-    newSocket.on('counter-updated', (gameState) => {
-      console.log('Received counter update:', gameState);
-      setCounter(gameState.counter);
-      setLogs(gameState.logs);
+    newSocket.on('game-created', (data) => {
+      console.log('Game created:', data);
+      setGameId(data.gameId);
+      setGameName(data.gameName);
+      setGameState(data.gameState);
+      setPlayers(data.players);
+      setBoard(data.board);
+      setYellowScore(data.yellowRoundsWon);
+      setPinkScore(data.pinkRoundsWon);
+      setYellowTotalPoints(data.yellowTotalPoints);
+      setPinkTotalPoints(data.pinkTotalPoints);
+      setYellowCurrentPoints(data.yellowCurrentPoints);
+      setPinkCurrentPoints(data.pinkCurrentPoints);
+      setPlayerCard(data.playerCard);
+      setPlayerTeam(data.players.find(p => p.username === username)?.team);
+      setHasJoined(true);
+    });
+
+    newSocket.on('game-error', (data) => {
+      console.log('Game error:', data.message);
+      alert(`Error: ${data.message}`);
+    });
+
+    newSocket.on('initial-state', (data) => {
+      console.log('Received initial state:', data);
+      setGameId(data.gameId);
+      setGameName(data.gameName);
+      setGameState(data.gameState);
+      setPlayers(data.players);
+      setBoard(data.board);
+      setYellowScore(data.yellowRoundsWon);
+      setPinkScore(data.pinkRoundsWon);
+      setYellowTotalPoints(data.yellowTotalPoints);
+      setPinkTotalPoints(data.pinkTotalPoints);
+      setYellowCurrentPoints(data.yellowCurrentPoints);
+      setPinkCurrentPoints(data.pinkCurrentPoints);
+      setPlayerCard(data.playerCard);
+      setPlayerTeam(data.team);
+    });
+
+    newSocket.on('player-joined', (data) => {
+      console.log('Player joined:', data.username);
+      setPlayers(data.players);
+      if (data.yellowRoundsWon !== undefined) setYellowScore(data.yellowRoundsWon);
+      if (data.pinkRoundsWon !== undefined) setPinkScore(data.pinkRoundsWon);
+      if (data.yellowTotalPoints !== undefined) setYellowTotalPoints(data.yellowTotalPoints);
+      if (data.pinkTotalPoints !== undefined) setPinkTotalPoints(data.pinkTotalPoints);
+      if (data.yellowCurrentPoints !== undefined) setYellowCurrentPoints(data.yellowCurrentPoints);
+      if (data.pinkCurrentPoints !== undefined) setPinkCurrentPoints(data.pinkCurrentPoints);
+    });
+
+    newSocket.on('player-left', (data) => {
+      console.log('Player left:', data.username);
+      setPlayers(data.players);
+    });
+
+    newSocket.on('player-ready-update', (data) => {
+      console.log('Player ready update:', data);
+      setPlayers(data.players);
+      setAllPlayersReady(data.allReady);
+      if (data.yellowRoundsWon !== undefined) setYellowScore(data.yellowRoundsWon);
+      if (data.pinkRoundsWon !== undefined) setPinkScore(data.pinkRoundsWon);
+      if (data.yellowTotalPoints !== undefined) setYellowTotalPoints(data.yellowTotalPoints);
+      if (data.pinkTotalPoints !== undefined) setPinkTotalPoints(data.pinkTotalPoints);
+    });
+
+    newSocket.on('player-disconnected', (data) => {
+      console.log('Player disconnected:', data);
+      alert(`${data.disconnectedPlayer} has disconnected. You win automatically!`);
+      setGameState(data.gameState);
+      setYellowScore(data.yellowRoundsWon);
+      setPinkScore(data.pinkRoundsWon);
+      setYellowTotalPoints(data.yellowTotalPoints);
+      setPinkTotalPoints(data.pinkTotalPoints);
+    });
+
+    newSocket.on('game-started', (data) => {
+      console.log('Game started:', data);
+      setGameState(data.gameState);
+      setTimeLeft(data.timeLeft);
+      if (data.yellowRoundsWon !== undefined) setYellowScore(data.yellowRoundsWon);
+      if (data.pinkRoundsWon !== undefined) setPinkScore(data.pinkRoundsWon);
+      if (data.yellowTotalPoints !== undefined) setYellowTotalPoints(data.yellowTotalPoints);
+      if (data.pinkTotalPoints !== undefined) setPinkTotalPoints(data.pinkTotalPoints);
+    });
+
+    newSocket.on('card-played', (data) => {
+      console.log('Card played:', data);
+      setBoard(data.board);
+      setLogs(data.logs);
+      if (data.yellowCurrentPoints !== undefined) setYellowCurrentPoints(data.yellowCurrentPoints);
+      if (data.pinkCurrentPoints !== undefined) setPinkCurrentPoints(data.pinkCurrentPoints);
+    });
+
+    newSocket.on('new-card', (data) => {
+      console.log('New card received:', data.newCard);
+      setPlayerCard(data.newCard);
+    });
+
+    newSocket.on('team-went-out', (data) => {
+      console.log('Team went out:', data);
+      setYellowTeamOut(data.yellowTeamOut);
+      setPinkTeamOut(data.pinkTeamOut);
+      setLogs(data.logs);
+    });
+
+    newSocket.on('round-ended', (data) => {
+      console.log('Round ended:', data);
+      setGameState(data.gameState);
+      setYellowScore(data.yellowRoundsWon);
+      setPinkScore(data.pinkRoundsWon);
+      setYellowTotalPoints(data.yellowTotalPoints);
+      setPinkTotalPoints(data.pinkTotalPoints);
+      setYellowCurrentPoints(data.yellowCurrentPoints);
+      setPinkCurrentPoints(data.pinkCurrentPoints);
+      setYellowTeamOut(false);
+      setPinkTeamOut(false);
+      setPlayers(data.players);
+      setIsReady(false);
+      setWaitingForNextRound(true);
+      
+      // Store last round info for display
+      setLastRoundInfo({
+        winner: data.roundWinner,
+        yellowPoints: data.yellowCurrentPoints,
+        pinkPoints: data.pinkCurrentPoints
+      });
+      
+      if (data.gameWinner) {
+        alert(`Game Over! ${data.gameWinner.charAt(0).toUpperCase() + data.gameWinner.slice(1)} team wins!`);
+      }
+    });
+
+    newSocket.on('round-started', (data) => {
+      console.log('Round started:', data);
+      setGameState(data.gameState);
+      setBoard(data.board);
+      setTimeLeft(data.timeLeft);
+      setYellowTeamOut(false);
+      setPinkTeamOut(false);
+      setWaitingForNextRound(false);
+      setIsReady(false);
+      setLastRoundInfo(null);
+      if (data.yellowRoundsWon !== undefined) setYellowScore(data.yellowRoundsWon);
+      if (data.pinkRoundsWon !== undefined) setPinkScore(data.pinkRoundsWon);
+      if (data.yellowTotalPoints !== undefined) setYellowTotalPoints(data.yellowTotalPoints);
+      if (data.pinkTotalPoints !== undefined) setPinkTotalPoints(data.pinkTotalPoints);
+      if (data.yellowCurrentPoints !== undefined) setYellowCurrentPoints(data.yellowCurrentPoints);
+      if (data.pinkCurrentPoints !== undefined) setPinkCurrentPoints(data.pinkCurrentPoints);
+    });
+
+    newSocket.on('timer-update', (data) => {
+      setTimeLeft(data.timeLeft);
+    });
+
+    newSocket.on('invalid-play', (data) => {
+      alert(data.message);
+    });
+
+    newSocket.on('next-round-ready-update', (data) => {
+      console.log('Next round ready update:', data);
+      setPlayers(data.players);
+      setAllPlayersReady(data.allReady);
+      if (data.yellowRoundsWon !== undefined) setYellowScore(data.yellowRoundsWon);
+      if (data.pinkRoundsWon !== undefined) setPinkScore(data.pinkRoundsWon);
+      if (data.yellowTotalPoints !== undefined) setYellowTotalPoints(data.yellowTotalPoints);
+      if (data.pinkTotalPoints !== undefined) setPinkTotalPoints(data.pinkTotalPoints);
+      
+      // Update last round info if provided
+      if (data.lastRoundWinner !== undefined) {
+        setLastRoundInfo({
+          winner: data.lastRoundWinner,
+          yellowPoints: data.lastRoundYellowPoints,
+          pinkPoints: data.lastRoundPinkPoints
+        });
+      }
     });
 
     newSocket.on('disconnect', () => {
@@ -43,118 +249,823 @@ function CounterApp() {
       console.log('Cleaning up socket connection');
       newSocket.disconnect();
     };
-  }, []);
+  }, [username]);
 
-  const handleJoin = () => {
+  const handleCreateGame = () => {
     if (username.trim()) {
-      setHasJoined(true);
-      console.log('User joined as:', username);
+      console.log('Creating new game for user:', username);
+      socket.emit('create-game', { username, gameName });
     }
   };
 
-  const handleIncrement = () => {
-    if (socket && username) {
-      console.log('Sending increment request for user:', username);
-      socket.emit('increment-counter', { username });
+  const handleJoinExistingGame = (selectedGameId) => {
+    if (username.trim() && selectedGameId) {
+      setGameId(selectedGameId);
+      setHasJoined(true);
+      console.log('User joined as:', username, 'in game:', selectedGameId);
+      socket.emit('join-game', { username, gameId: selectedGameId });
     }
+  };
+
+  const handleJoin = () => {
+    if (username.trim() && gameId.trim()) {
+      setHasJoined(true);
+      console.log('User joined as:', username, 'in game:', gameId);
+      socket.emit('join-game', { username, gameId });
+    }
+  };
+
+  const handlePlayerReady = () => {
+    setIsReady(true);
+    socket.emit('player-ready');
+  };
+
+  const handlePlayCard = (targetRow, targetPosition) => {
+    if (gameState === 'playing' && playerCard) {
+      const targetCard = targetRow === 'yellow' ? 
+        board.yellowSharedCards[targetPosition] : 
+        board.pinkSharedCards[targetPosition];
+      
+      // Check if play is valid
+      if (Math.abs(playerCard.number - targetCard.number) === 1) {
+        socket.emit('play-card', { targetRow, targetPosition });
+      } else {
+        alert('Invalid play! Card must be +1 or -1 from target.');
+      }
+    }
+  };
+
+  const handleTeamGoOut = () => {
+    if (gameState === 'playing') {
+      const confirmGoOut = window.confirm('Are you sure you want your team to go out?');
+      if (confirmGoOut) {
+        socket.emit('team-go-out');
+      }
+    }
+  };
+
+  const handleStartNextRound = () => {
+    socket.emit('start-next-round');
+  };
+
+  const canPlayCard = (targetCard) => {
+    return gameState === 'playing' && 
+           playerCard && 
+           Math.abs(playerCard.number - targetCard.number) === 1 &&
+           !((playerTeam === 'yellow' && yellowTeamOut) || (playerTeam === 'pink' && pinkTeamOut));
+  };
+
+  const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
   // Login screen
   if (!hasJoined) {
     return (
       <div style={{
-        padding: '50px',
-        textAlign: 'center',
-        maxWidth: '400px',
+        padding: '20px',
+        maxWidth: '600px',
         margin: '0 auto',
-        fontFamily: 'Ariel, sans-serif'
+        fontFamily: 'Arial, sans-serif'
       }}>
-        <h1>Counter App</h1>
-        <p>Connection Status: {isConnected ? 'Connected' : 'Disconnected'}</p>
+        <h1 style={{ textAlign: 'center', color: '#333' }}>Multi-Game Counter App</h1>
+        <p style={{ textAlign: 'center', marginBottom: '30px' }}>
+          Connection Status: <span style={{ color: isConnected ? 'green' : 'red' }}>
+            {isConnected ? 'Connected' : 'Disconnected'}
+          </span>
+        </p>
 
-        <input
-          type="text"
-          placeholder="Enter username"
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-          style={{
-            padding: '10px',
-            fontSize: '16px',
-            width: '200px',
-            marginRight: '10px',
-            border: '2px solid #ddd',
-            borderRadius: '5px',
-          }}
-        />
+        {/* Username Input */}
+        <div style={{ marginBottom: '30px', textAlign: 'center' }}>
+          <input
+            type="text"
+            placeholder="Enter your username"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            style={{
+              padding: '12px',
+              fontSize: '16px',
+              width: '250px',
+              border: '2px solid #ddd',
+              borderRadius: '8px',
+              textAlign: 'center'
+            }}
+          />
+        </div>
 
-        <button
-          onClick={handleJoin}
-          disabled={!username.trim() || !isConnected}
-          style={{
-            padding: '10px 20px',
-            fontSize: '16px',
-            backgroundColor: isConnected ? '#4CAF50' : '#ccc',
-            color: 'white',
-            border: 'none',
-            borderRadius: '5px',
-            cursor: isConnected ? 'pointer' : 'not-allowed'
-          }}
-        >
-          Join
-        </button>
+        {username.trim() && (
+          <>
+            {/* Create New Game Section */}
+            <div style={{
+              backgroundColor: '#e8f5e8',
+              padding: '20px',
+              borderRadius: '10px',
+              marginBottom: '20px'
+            }}>
+              <h3 style={{ margin: '0 0 15px 0', color: '#2e7d32' }}>Create New Game</h3>
+              <div style={{ marginBottom: '15px' }}>
+                <input
+                  type="text"
+                  placeholder="Game name (optional)"
+                  value={gameName}
+                  onChange={(e) => setGameName(e.target.value)}
+                  style={{
+                    padding: '10px',
+                    fontSize: '14px',
+                    width: '200px',
+                    border: '1px solid #ccc',
+                    borderRadius: '5px',
+                    marginRight: '10px'
+                  }}
+                />
+                <button
+                  onClick={handleCreateGame}
+                  disabled={!isConnected}
+                  style={{
+                    padding: '10px 20px',
+                    fontSize: '14px',
+                    backgroundColor: isConnected ? '#4CAF50' : '#ccc',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '5px',
+                    cursor: isConnected ? 'pointer' : 'not-allowed'
+                  }}
+                >
+                  Create New Game
+                </button>
+              </div>
+            </div>
+
+            {/* Join Existing Game Section */}
+            <div style={{
+              backgroundColor: '#e3f2fd',
+              padding: '20px',
+              borderRadius: '10px',
+              marginBottom: '20px'
+            }}>
+              <h3 style={{ margin: '0 0 15px 0', color: '#1976d2' }}>Join Existing Game</h3>
+              
+              {availableGames.length > 0 ? (
+                <div>
+                  <p style={{ marginBottom: '15px', color: '#666' }}>Available Games:</p>
+                  <div style={{ display: 'grid', gap: '10px' }}>
+                    {availableGames.map((game) => (
+                      <div key={game.id} style={{
+                        backgroundColor: 'white',
+                        padding: '15px',
+                        borderRadius: '8px',
+                        border: '1px solid #ddd',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center'
+                      }}>
+                        <div>
+                          <strong>{game.name}</strong> <span style={{ color: '#666' }}>({game.id})</span>
+                          <br />
+                          <small style={{ color: '#888' }}>
+                            {game.playerCount} player{game.playerCount !== 1 ? 's' : ''} • 
+                            Rounds: Yellow {game.yellowRoundsWon} Pink {game.pinkRoundsWon} • 
+                            Total Points: Yellow {game.yellowTotalPoints || 0} Pink {game.pinkTotalPoints || 0} • 
+                            Status: {game.gameState}
+                          </small>
+                        </div>
+                        <button
+                          onClick={() => handleJoinExistingGame(game.id)}
+                          disabled={game.playerCount >= 2}
+                          style={{
+                            padding: '8px 16px',
+                            fontSize: '14px',
+                            backgroundColor: game.playerCount >= 2 ? '#ccc' : '#2196F3',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '5px',
+                            cursor: game.playerCount >= 2 ? 'not-allowed' : 'pointer'
+                          }}
+                        >
+                          {game.playerCount >= 2 ? 'Full' : 'Join'}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <p style={{ color: '#666', fontStyle: 'italic' }}>No active games available</p>
+              )}
+            </div>
+
+            {/* Join by Game ID Section */}
+            <div style={{
+              backgroundColor: '#fff3e0',
+              padding: '20px',
+              borderRadius: '10px'
+            }}>
+              <h3 style={{ margin: '0 0 15px 0', color: '#f57c00' }}>Join by Game ID</h3>
+              <div>
+                <input
+                  type="text"
+                  placeholder="Enter game ID"
+                  value={gameId}
+                  onChange={(e) => setGameId(e.target.value)}
+                  style={{
+                    padding: '10px',
+                    fontSize: '14px',
+                    width: '200px',
+                    border: '1px solid #ccc',
+                    borderRadius: '5px',
+                    marginRight: '10px'
+                  }}
+                />
+                <button
+                  onClick={handleJoin}
+                  disabled={!gameId.trim() || !isConnected}
+                  style={{
+                    padding: '10px 20px',
+                    fontSize: '14px',
+                    backgroundColor: (isConnected && gameId.trim()) ? '#FF9800' : '#ccc',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '5px',
+                    cursor: (isConnected && gameId.trim()) ? 'pointer' : 'not-allowed'
+                  }}
+                >
+                  Join Game
+                </button>
+              </div>
+            </div>
+          </>
+        )}
       </div>
     );
   }
 
-  // Main counter interface
-    return (
-    <>
+  // Main game interface
+  return (
+    <div style={{ padding: '20px', fontFamily: 'Arial, sans-serif', maxWidth: '1000px', margin: '0 auto' }}>
+      {/* Game Header */}
       <div style={{
+        backgroundColor: '#f5f5f5',
         padding: '20px',
         borderRadius: '10px',
         marginBottom: '20px',
         textAlign: 'center'
       }}>
-        <p><strong>Username:</strong> {username}</p>
-        <p><strong>Connection:</strong> {isConnected ? 'Connected' : 'Disconnected'} </p>
-        <p><strong>Socket ID:</strong> {socket?.id}</p>
+        <h2 style={{ margin: '0 0 10px 0', color: '#333' }}>{gameName}</h2>
+        <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', flexWrap: 'wrap' }}>
+          <span><strong>Player:</strong> {username} ({playerTeam})</span>
+          <span><strong>Game ID:</strong> {gameId}</span>
+          <span><strong>Rounds Won - Yellow:</strong> {yellowScore} <strong>Pink:</strong> {pinkScore}</span>
+          <span><strong>Total Points - Yellow:</strong> {yellowTotalPoints} <strong>Pink:</strong> {pinkTotalPoints}</span>
+          <span><strong>Current Round Points - Yellow:</strong> {yellowCurrentPoints} <strong>Pink:</strong> {pinkCurrentPoints}</span>
+          {timeLeft > 0 && <span><strong>Time:</strong> {formatTime(timeLeft)}</span>}
+          {gameState === 'game-ended' && (
+            <span style={{ 
+              fontWeight: 'bold', 
+              color: yellowScore >= 3 ? '#FFD700' : '#FF69B4',
+              fontSize: '18px'
+            }}>
+              🏆 {yellowScore >= 3 ? 'YELLOW' : 'PINK'} TEAM WINS!
+            </span>
+          )}
+        </div>
       </div>
 
-      <div style={{
-        backgroundColor: '#e3f2fd',
-        padding: '30px',
-        borderRadius: '10px',
-        textAlign: 'center',
-        marginBottom: '20px'
-      }}>
+      {gameState === 'waiting' && (
+        <div style={{
+          backgroundColor: '#fff3e0',
+          padding: '20px',
+          borderRadius: '10px',
+          marginBottom: '20px',
+          textAlign: 'center'
+        }}>
+          <h3>Waiting for Players</h3>
+          <p>Players in game: {players.length}/2</p>
+          <div style={{ marginBottom: '15px' }}>
+            {players.map((player, index) => (
+              <span key={index} style={{
+                backgroundColor: player.team === 'yellow' ? '#FFD700' : '#FF69B4',
+                color: player.team === 'yellow' ? '#000' : '#fff',
+                padding: '5px 10px',
+                borderRadius: '15px',
+                margin: '5px',
+                display: 'inline-block'
+              }}>
+                {player.username} ({player.team}) {player.isReady ? '✓' : '○'}
+              </span>
+            ))}
+          </div>
+          {players.length >= 2 && !isReady && (
+            <button
+              onClick={handlePlayerReady}
+              style={{
+                padding: '10px 20px',
+                fontSize: '16px',
+                backgroundColor: '#4CAF50',
+                color: 'white',
+                border: 'none',
+                borderRadius: '5px',
+                cursor: 'pointer'
+              }}
+            >
+              Ready to Play
+            </button>
+          )}
+          {isReady && <p style={{ color: 'green' }}>You are ready! Waiting for other players...</p>}
+        </div>
+      )}
 
-        <h2>Current Counter: <span style={{ fontSize: '2em', color: '#1976d2' }}>{counter}</span></h2>
+      {gameState === 'round-ended' && waitingForNextRound && (
+        <div style={{
+          backgroundColor: '#f3e5f5',
+          padding: '20px',
+          borderRadius: '10px',
+          marginBottom: '20px',
+          textAlign: 'center'
+        }}>
+          <h2 style={{ 
+            color: '#9C27B0', 
+            marginBottom: '20px',
+            fontSize: '28px' 
+          }}>
+            🎯 ROUND OVER! 🎯
+          </h2>
+          
+          {lastRoundInfo && (
+            <div style={{ marginBottom: '20px' }}>
+              <h3 style={{ marginBottom: '15px' }}>Last Round Results:</h3>
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'center', 
+                gap: '40px',
+                marginBottom: '15px' 
+              }}>
+                <div style={{
+                  backgroundColor: '#FFD700',
+                  color: '#000',
+                  padding: '10px 20px',
+                  borderRadius: '10px',
+                  fontWeight: 'bold'
+                }}>
+                  Yellow: {lastRoundInfo.yellowPoints} points
+                </div>
+                <div style={{
+                  backgroundColor: '#FF69B4',
+                  color: '#fff',
+                  padding: '10px 20px',
+                  borderRadius: '10px',
+                  fontWeight: 'bold'
+                }}>
+                  Pink: {lastRoundInfo.pinkPoints} points
+                </div>
+              </div>
+              
+              {lastRoundInfo.winner !== 'tie' && (
+                <h3 style={{ 
+                  color: lastRoundInfo.winner === 'yellow' ? '#FFD700' : '#FF69B4',
+                  fontSize: '20px' 
+                }}>
+                  🏆 {lastRoundInfo.winner.toUpperCase()} TEAM WINS THE ROUND! 🏆
+                </h3>
+              )}
+              
+              {lastRoundInfo.winner === 'tie' && (
+                <h3 style={{ color: '#666' }}>
+                  🤝 ROUND TIED! 🤝
+                </h3>
+              )}
+            </div>
+          )}
+          
+          <div style={{ marginBottom: '20px' }}>
+            <h3>Updated Scores:</h3>
+            <div style={{ 
+              display: 'flex', 
+              justifyContent: 'center', 
+              gap: '40px',
+              marginBottom: '20px' 
+            }}>
+              <div>
+                <strong style={{ color: '#FFD700' }}>Yellow Team:</strong>
+                <br />
+                Rounds Won: {yellowScore}
+                <br />
+                Total Points: {yellowTotalPoints}
+              </div>
+              <div>
+                <strong style={{ color: '#FF69B4' }}>Pink Team:</strong>
+                <br />
+                Rounds Won: {pinkScore}
+                <br />
+                Total Points: {pinkTotalPoints}
+              </div>
+            </div>
+          </div>
+          
+          {yellowScore < 3 && pinkScore < 3 && (
+            <>
+              <h3>Waiting for Next Round</h3>
+              <p>Both players must be ready to start the next round</p>
+              <div style={{ marginBottom: '20px' }}>
+                {players.map((player, index) => (
+                  <span key={index} style={{
+                    backgroundColor: player.team === 'yellow' ? '#FFD700' : '#FF69B4',
+                    color: player.team === 'yellow' ? '#000' : '#fff',
+                    padding: '8px 15px',
+                    borderRadius: '20px',
+                    margin: '5px',
+                    display: 'inline-block',
+                    fontSize: '14px'
+                  }}>
+                    {player.username} ({player.team}) {player.isReady ? '✅' : '⏳'}
+                  </span>
+                ))}
+              </div>
+              
+              {!isReady && (
+                <button
+                  onClick={() => {
+                    setIsReady(true);
+                    handleStartNextRound();
+                  }}
+                  style={{
+                    padding: '15px 30px',
+                    fontSize: '18px',
+                    backgroundColor: '#9C27B0',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '10px',
+                    cursor: 'pointer',
+                    fontWeight: 'bold'
+                  }}
+                >
+                  🚀 Ready for Next Round!
+                </button>
+              )}
+              
+              {isReady && !allPlayersReady && (
+                <p style={{ 
+                  color: '#9C27B0', 
+                  fontWeight: 'bold',
+                  fontSize: '16px' 
+                }}>
+                  ✅ You are ready! Waiting for other player...
+                </p>
+              )}
+            </>
+          )}
+          
+          {(yellowScore >= 3 || pinkScore >= 3) && (
+            <div>
+              <h2 style={{ 
+                color: yellowScore >= 3 ? '#FFD700' : '#FF69B4',
+                fontSize: '32px',
+                marginBottom: '20px' 
+              }}>
+                🎉 {yellowScore >= 3 ? 'YELLOW' : 'PINK'} TEAM WINS THE GAME! 🎉
+              </h2>
+              <div style={{ 
+                fontSize: '18px',
+                color: '#666' 
+              }}>
+                Final Score: Yellow {yellowScore} - {pinkScore} Pink
+                <br />
+                Total Points: Yellow {yellowTotalPoints} - {pinkTotalPoints} Pink
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
-        <button
-          onClick={handleIncrement}
-          disabled={!isConnected}
-          style={{
-            padding: '15px 30px',
-            fontSize: '18px',
-            backgroundColor: isConnected ? '#2196F3' : '#ccc',
-            color: 'white',
-            border: 'none',
-            borderRadius: '8px',
-            cursor: isConnected ? 'pointer' : 'not-allowed',
-            marginTop: '10px'
-          }}
-        >
-          Add +1
-        </button>
-      </div>
+      {/* Show final board state after round ends */}
+      {gameState === 'round-ended' && waitingForNextRound && (
+        <div style={{
+          backgroundColor: '#e8f5e8',
+          padding: '20px',
+          borderRadius: '10px',
+          marginBottom: '20px'
+        }}>
+          <h3 style={{ textAlign: 'center', margin: '0 0 20px 0', color: '#2e7d32' }}>
+            Final Board State - Round {gameState === 'game-ended' ? 'Game' : 'Round'} Over
+          </h3>
+          
+          {/* Row 1 - Yellow Player's Card */}
+          <div style={{ 
+            display: 'flex', 
+            justifyContent: 'center', 
+            marginBottom: '10px'
+          }}>
+            <div style={{
+              width: '80px',
+              height: '100px',
+              backgroundColor: '#FFD700',
+              border: '2px solid #333',
+              borderRadius: '8px',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '14px',
+              fontWeight: 'bold'
+            }}>
+              <div style={{ fontSize: '18px' }}>{board.yellowPlayerCard.number}</div>
+              <div style={{ fontSize: '10px' }}>value: {board.yellowPlayerCard.value}</div>
+            </div>
+          </div>
 
+          {/* Row 2 - Yellow Shared Cards */}
+          <div style={{ 
+            display: 'flex', 
+            justifyContent: 'center', 
+            gap: '10px',
+            marginBottom: '10px'
+          }}>
+            {board.yellowSharedCards.map((card, index) => (
+              <div
+                key={`yellow-final-${index}`}
+                style={{
+                  width: '80px',
+                  height: '100px',
+                  backgroundColor: card.team === 'yellow' ? '#FFD700' : '#FF69B4',
+                  border: '2px solid #333',
+                  borderRadius: '8px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '14px',
+                  fontWeight: 'bold',
+                  color: card.team === 'yellow' ? '#000' : '#fff'
+                }}
+              >
+                <div style={{ fontSize: '18px' }}>{card.number}</div>
+                <div style={{ fontSize: '10px' }}>value: {card.value}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Row 3 - Pink Shared Cards */}
+          <div style={{ 
+            display: 'flex', 
+            justifyContent: 'center', 
+            gap: '10px',
+            marginBottom: '10px'
+          }}>
+            {board.pinkSharedCards.map((card, index) => (
+              <div
+                key={`pink-final-${index}`}
+                style={{
+                  width: '80px',
+                  height: '100px',
+                  backgroundColor: card.team === 'pink' ? '#FF69B4' : '#FFD700',
+                  border: '2px solid #333',
+                  borderRadius: '8px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '14px',
+                  fontWeight: 'bold',
+                  color: card.team === 'pink' ? '#fff' : '#000'
+                }}
+              >
+                <div style={{ fontSize: '18px' }}>{card.number}</div>
+                <div style={{ fontSize: '10px' }}>value: {card.value}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Row 4 - Pink Player's Card */}
+          <div style={{ 
+            display: 'flex', 
+            justifyContent: 'center'
+          }}>
+            <div style={{
+              width: '80px',
+              height: '100px',
+              backgroundColor: '#FF69B4',
+              border: '2px solid #333',
+              borderRadius: '8px',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '14px',
+              fontWeight: 'bold',
+              color: '#fff'
+            }}>
+              <div style={{ fontSize: '18px' }}>{board.pinkPlayerCard.number}</div>
+              <div style={{ fontSize: '10px' }}>value: {board.pinkPlayerCard.value}</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {(gameState === 'playing' || (gameState === 'round-ended' && !waitingForNextRound)) && (
+        <>
+          {/* Game Board */}
+          <div style={{
+            backgroundColor: '#e8f5e8',
+            padding: '20px',
+            borderRadius: '10px',
+            marginBottom: '20px'
+          }}>
+            <h3 style={{ textAlign: 'center', margin: '0 0 20px 0' }}>Game Board</h3>
+            
+            {/* Row 1 - Yellow Player's Hidden Card */}
+            <div style={{ 
+              display: 'flex', 
+              justifyContent: 'center', 
+              marginBottom: '10px',
+              opacity: playerTeam === 'yellow' ? 1 : 0.3
+            }}>
+              <div style={{
+                width: '80px',
+                height: '100px',
+                backgroundColor: playerTeam === 'yellow' ? '#FFD700' : '#ddd',
+                border: '2px solid #333',
+                borderRadius: '8px',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '14px',
+                fontWeight: 'bold'
+              }}>
+                {playerTeam === 'yellow' && playerCard ? (
+                  <div>
+                    <div style={{ fontSize: '18px', fontWeight: 'bold' }}>{playerCard.number}</div>
+                    <div style={{ fontSize: '10px' }}>value: {playerCard.value}</div>
+                  </div>
+                ) : '?'}
+              </div>
+            </div>
+
+            {/* Row 2 - Yellow Shared Cards */}
+            <div style={{ 
+              display: 'flex', 
+              justifyContent: 'center', 
+              gap: '10px',
+              marginBottom: '10px'
+            }}>
+              {board.yellowSharedCards.map((card, index) => (
+                <div
+                  key={`yellow-${index}`}
+                  onClick={() => handlePlayCard('yellow', index)}
+                  style={{
+                    width: '80px',
+                    height: '100px',
+                    backgroundColor: card.team === 'yellow' ? 
+                      (canPlayCard(card) ? '#FFE135' : '#FFD700') : 
+                      (canPlayCard(card) ? '#FFB3DA' : '#FF69B4'),
+                    border: canPlayCard(card) ? '3px solid #4CAF50' : '2px solid #333',
+                    borderRadius: '8px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '14px',
+                    fontWeight: 'bold',
+                    cursor: canPlayCard(card) ? 'pointer' : 'default',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  <div style={{ fontSize: '18px' }}>{card.number}</div>
+                  <div style={{ fontSize: '10px' }}>value: {card.value}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Row 3 - Pink Shared Cards */}
+            <div style={{ 
+              display: 'flex', 
+              justifyContent: 'center', 
+              gap: '10px',
+              marginBottom: '10px'
+            }}>
+              {board.pinkSharedCards.map((card, index) => (
+                <div
+                  key={`pink-${index}`}
+                  onClick={() => handlePlayCard('pink', index)}
+                  style={{
+                    width: '80px',
+                    height: '100px',
+                    backgroundColor: card.team === 'pink' ? 
+                      (canPlayCard(card) ? '#FFB3DA' : '#FF69B4') : 
+                      (canPlayCard(card) ? '#FFE135' : '#FFD700'),
+                    border: canPlayCard(card) ? '3px solid #4CAF50' : '2px solid #333',
+                    borderRadius: '8px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '14px',
+                    fontWeight: 'bold',
+                    cursor: canPlayCard(card) ? 'pointer' : 'default',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  <div style={{ fontSize: '18px' }}>{card.number}</div>
+                  <div style={{ fontSize: '10px' }}>value: {card.value}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Row 4 - Pink Player's Hidden Card */}
+            <div style={{ 
+              display: 'flex', 
+              justifyContent: 'center',
+              opacity: playerTeam === 'pink' ? 1 : 0.3
+            }}>
+              <div style={{
+                width: '80px',
+                height: '100px',
+                backgroundColor: playerTeam === 'pink' ? '#FF69B4' : '#ddd',
+                border: '2px solid #333',
+                borderRadius: '8px',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '14px',
+                fontWeight: 'bold'
+              }}>
+                {playerTeam === 'pink' && playerCard ? (
+                  <div>
+                    <div style={{ fontSize: '18px', fontWeight: 'bold' }}>{playerCard.number}</div>
+                    <div style={{ fontSize: '10px' }}>value: {playerCard.value}</div>
+                  </div>
+                ) : '?'}
+              </div>
+            </div>
+          </div>
+
+          {/* Your Card and Actions */}
+          {gameState === 'playing' && (
+            <div style={{
+              backgroundColor: '#e3f2fd',
+              padding: '20px',
+              borderRadius: '10px',
+              marginBottom: '20px',
+              textAlign: 'center'
+            }}>
+              <h3>Your Card: {playerCard ? `${playerCard.number} (value: ${playerCard.value})` : 'None'}</h3>
+              <p>Play on any visible card that is +1 or -1 from your card value</p>
+              
+              {!((playerTeam === 'yellow' && yellowTeamOut) || (playerTeam === 'pink' && pinkTeamOut)) && (
+                <button
+                  onClick={handleTeamGoOut}
+                  style={{
+                    padding: '10px 20px',
+                    fontSize: '16px',
+                    backgroundColor: '#FF9800',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '5px',
+                    cursor: 'pointer',
+                    marginTop: '10px'
+                  }}
+                >
+                  Go Out (Lock Current Score)
+                </button>
+              )}
+              
+              {((playerTeam === 'yellow' && yellowTeamOut) || (playerTeam === 'pink' && pinkTeamOut)) && (
+                <p style={{ color: '#FF9800', fontWeight: 'bold' }}>Your team has gone out!</p>
+              )}
+            </div>
+          )}
+
+          {/* Team Status */}
+          <div style={{
+            backgroundColor: '#fff3e0',
+            padding: '15px',
+            borderRadius: '10px',
+            marginBottom: '20px'
+          }}>
+            <h3>Team Status</h3>
+            <div style={{ display: 'flex', justifyContent: 'space-around' }}>
+              <div>
+                <strong style={{ color: '#FFD700' }}>Yellow Team:</strong>
+                {yellowTeamOut ? ' OUT' : ' Playing'}
+              </div>
+              <div>
+                <strong style={{ color: '#FF69B4' }}>Pink Team:</strong>
+                {pinkTeamOut ? ' OUT' : ' Playing'}
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Activity Log */}
       <div>
-        <h3> Activity Log</h3>
+        <h3>Activity Log</h3>
         <div style={{
           backgroundColor: '#fff3e0',
           border: '1px solid #ffb74d',
           borderRadius: '5px', 
-          maxHeight: '300px',
+          maxHeight: '200px',
           overflowY: 'auto',
           padding: '10px'
         }}>
@@ -163,14 +1074,17 @@ function CounterApp() {
           ) : (
             logs.map((log) => (
               <div key={log.id} style={{
-                padding: '8px',
-                borderBotom: '1px solid #ffe0b2',
+                padding: '5px',
+                borderBottom: '1px solid #ffe0b2',
                 display: 'flex',
                 justifyContent: 'space-between',
-                alignItems: 'center'
+                alignItems: 'center',
+                fontSize: '14px'
               }}>
                 <span>
-                  <strong>{log.username}</strong> {log.action} =&gt; Total: <strong>{log.newTotal}</strong>
+                  <strong style={{ color: log.team === 'yellow' ? '#FFD700' : '#FF69B4' }}>
+                    {log.username}
+                  </strong> {log.action}
                 </span>
                 <span style={{ color: '#666', fontSize: '12px' }}>
                   {log.timestamp}
@@ -180,7 +1094,7 @@ function CounterApp() {
           )}
         </div>
       </div>
-    </>
+    </div>
   );
 }
 
