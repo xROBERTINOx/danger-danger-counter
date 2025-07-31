@@ -316,10 +316,7 @@ function CounterApp() {
   
   const handleDiscardCard = () => {
     if (gameState === 'playing' && playerCard) {
-      const confirmDiscard = window.confirm('Are you sure you want to discard this card? Points will be given to the opponent.');
-      if (confirmDiscard) {
-        socket.emit('discard-card');
-      }
+      socket.emit('discard-card');
     }
   };
 
