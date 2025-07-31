@@ -47,11 +47,13 @@ function initializeGameBoard() {
       createCard(getRandomCard(), 'yellow'),
       createCard(getRandomCard(), 'yellow')
     ],
+    yellowDiscardPile: [],
     pinkSharedCards: [
       createCard(getRandomCard(), 'pink'),
       createCard(getRandomCard(), 'pink'),
       createCard(getRandomCard(), 'pink')
     ],
+    pinkDiscardPile: [],
     pinkPlayerCard: createCard(getRandomCard(), 'pink')
   };
 }
@@ -71,6 +73,15 @@ function calculateTeamScores(board) {
   board.pinkSharedCards.forEach(card => {
     if (card.team === 'yellow') yellowScore += card.value;
     else if (card.team === 'pink') pinkScore += card.value;
+  });
+  
+  // Count cards in discard piles (points go to the opposite team)
+  board.yellowDiscardPile.forEach(card => {
+    if (card.team === 'yellow') pinkScore += card.value;
+  });
+  
+  board.pinkDiscardPile.forEach(card => {
+    if (card.team === 'pink') yellowScore += card.value;
   });
   
   return { yellowScore, pinkScore };
@@ -465,6 +476,66 @@ io.on('connection', (socket) => {
     socket.emit('new-card', { newCard: player.currentCard });
   });
 
+  socket.on('discard-card', () => {
+    const gameId = socket.gameId;
+    if (!gameId || !gameRooms.has(gameId)) return;
+    
+    const gameRoom = getGameRoom(gameId);
+    const player = gameRoom.players.get(socket.id);
+    
+    if (!player || gameRoom.gameState !== 'playing') return;
+    
+    // Check if player's team has gone out
+    if ((player.team === 'yellow' && gameRoom.yellowTeamOut) || 
+        (player.team === 'pink' && gameRoom.pinkTeamOut)) {
+      return;
+    }
+    
+    const playerCard = player.currentCard;
+    
+    // Add the card to the appropriate discard pile
+    if (player.team === 'yellow') {
+      gameRoom.board.yellowDiscardPile.push(playerCard);
+    } else {
+      gameRoom.board.pinkDiscardPile.push(playerCard);
+    }
+    
+    // Give player a new card
+    player.currentCard = createCard(getRandomCard(), player.team);
+    
+    // Calculate current scores (discard points go to the opponent)
+    const currentScores = calculateTeamScores(gameRoom.board);
+    gameRoom.yellowCurrentPoints = currentScores.yellowScore;
+    gameRoom.pinkCurrentPoints = currentScores.pinkScore;
+    
+    // Add to log
+    const logEntry = {
+      id: Date.now(),
+      username: player.username,
+      team: player.team,
+      action: `discarded ${player.team} ${playerCard.number} (value: ${playerCard.value})`,
+      timestamp: new Date().toLocaleTimeString()
+    };
+    
+    gameRoom.logs.unshift(logEntry);
+    if (gameRoom.logs.length > 20) {
+      gameRoom.logs = gameRoom.logs.slice(0, 20);
+    }
+    
+    // Broadcast the discard to all players
+    io.to(gameId).emit('card-discarded', {
+      board: gameRoom.board,
+      logs: gameRoom.logs,
+      playerId: socket.id,
+      discardedCard: playerCard,
+      yellowCurrentPoints: gameRoom.yellowCurrentPoints,
+      pinkCurrentPoints: gameRoom.pinkCurrentPoints
+    });
+    
+    // Send new card only to the player who discarded
+    socket.emit('new-card', { newCard: player.currentCard });
+  });
+
   socket.on('team-go-out', () => {
     const gameId = socket.gameId;
     if (!gameId) return;
@@ -677,4 +748,4 @@ server.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
   console.log('Multi-game counter server initialized');
 });
-  
+

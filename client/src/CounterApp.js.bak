@@ -22,13 +22,11 @@ function CounterApp() {
       { number: 0, value: 0, team: 'yellow' },
       { number: 0, value: 0, team: 'yellow' }
     ],
-    yellowDiscardPile: [],
     pinkSharedCards: [
       { number: 0, value: 0, team: 'pink' },
       { number: 0, value: 0, team: 'pink' },
       { number: 0, value: 0, team: 'pink' }
     ],
-    pinkDiscardPile: [],
     pinkPlayerCard: { number: 0, value: 0, team: 'pink' }
   });
   const [yellowScore, setYellowScore] = useState(0); // rounds won
@@ -48,7 +46,10 @@ function CounterApp() {
 
   useEffect(() => {
     // Initialize socket connection
-    const newSocket = io('http://localhost:3001');
+    // Use the current host's hostname/IP but with server port
+    const serverUrl = `http://${window.location.hostname}:3001`;
+    console.log('Connecting to server at:', serverUrl);
+    const newSocket = io(serverUrl);
     setSocket(newSocket);
 
     console.log('Connecting to server...');
@@ -151,14 +152,6 @@ function CounterApp() {
 
     newSocket.on('card-played', (data) => {
       console.log('Card played:', data);
-      setBoard(data.board);
-      setLogs(data.logs);
-      if (data.yellowCurrentPoints !== undefined) setYellowCurrentPoints(data.yellowCurrentPoints);
-      if (data.pinkCurrentPoints !== undefined) setPinkCurrentPoints(data.pinkCurrentPoints);
-    });
-    
-    newSocket.on('card-discarded', (data) => {
-      console.log('Card discarded:', data);
       setBoard(data.board);
       setLogs(data.logs);
       if (data.yellowCurrentPoints !== undefined) setYellowCurrentPoints(data.yellowCurrentPoints);
@@ -310,15 +303,6 @@ function CounterApp() {
       const confirmGoOut = window.confirm('Are you sure you want your team to go out?');
       if (confirmGoOut) {
         socket.emit('team-go-out');
-      }
-    }
-  };
-  
-  const handleDiscardCard = () => {
-    if (gameState === 'playing' && playerCard) {
-      const confirmDiscard = window.confirm('Are you sure you want to discard this card? Points will be given to the opponent.');
-      if (confirmDiscard) {
-        socket.emit('discard-card');
       }
     }
   };
@@ -771,7 +755,7 @@ function CounterApp() {
           {/* Row 1 - Yellow Player's Card */}
           <div style={{ 
             display: 'flex', 
-            justifyContent: 'center',
+            justifyContent: 'center', 
             marginBottom: '10px'
           }}>
             <div style={{
@@ -792,87 +776,35 @@ function CounterApp() {
             </div>
           </div>
 
-          {/* Row 2 - Yellow Shared Cards and Discard Pile */}
+          {/* Row 2 - Yellow Shared Cards */}
           <div style={{ 
             display: 'flex', 
-            justifyContent: 'space-between', 
+            justifyContent: 'center', 
+            gap: '10px',
             marginBottom: '10px'
           }}>
-            <div style={{
-              width: '120px',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              marginLeft: '20px'
-            }}>
-              <div style={{ 
-                fontWeight: 'bold',
-                marginBottom: '5px'
-              }}>Yellow Discards</div>
-              <div style={{
-                width: '100px',
-                minHeight: '100px',
-                border: '1px dashed #FFD700',
-                borderRadius: '8px',
-                padding: '5px',
-                display: 'flex',
-                flexWrap: 'wrap',
-                gap: '2px',
-                justifyContent: 'center'
-              }}>
-                {board.yellowDiscardPile && board.yellowDiscardPile.map((card, index) => (
-                  <div
-                    key={`yellow-discard-${index}`}
-                    style={{
-                      width: '30px',
-                      height: '40px',
-                      backgroundColor: '#FFD700',
-                      border: '1px solid #333',
-                      borderRadius: '4px',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: '10px',
-                      margin: '2px'
-                    }}
-                  >
-                    <div>{card.number}</div>
-                    <div style={{ fontSize: '8px' }}>{card.value}</div>
-                  </div>
-                ))}
+            {board.yellowSharedCards.map((card, index) => (
+              <div
+                key={`yellow-final-${index}`}
+                style={{
+                  width: '80px',
+                  height: '100px',
+                  backgroundColor: card.team === 'yellow' ? '#FFD700' : '#FF69B4',
+                  border: '2px solid #333',
+                  borderRadius: '8px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '14px',
+                  fontWeight: 'bold',
+                  color: card.team === 'yellow' ? '#000' : '#fff'
+                }}
+              >
+                <div style={{ fontSize: '18px' }}>{card.number}</div>
+                <div style={{ fontSize: '10px' }}>value: {card.value}</div>
               </div>
-            </div>
-            
-            <div style={{ 
-              display: 'flex', 
-              justifyContent: 'center', 
-              gap: '10px',
-              flex: 1
-            }}>
-              {board.yellowSharedCards.map((card, index) => (
-                <div
-                  key={`yellow-final-${index}`}
-                  style={{
-                    width: '80px',
-                    height: '100px',
-                    backgroundColor: card.team === 'yellow' ? '#FFD700' : '#FF69B4',
-                    border: '2px solid #333',
-                    borderRadius: '8px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '14px',
-                    fontWeight: 'bold',
-                    color: card.team === 'yellow' ? '#000' : '#fff'
-                  }}
-                >
-                  <div style={{ fontSize: '18px' }}>{card.number}</div>
-                  <div style={{ fontSize: '10px' }}>value: {card.value}</div>
-                </div>
-              ))}
-            </div>
+            ))}
           </div>
 
           {/* Row 3 - Pink Shared Cards */}
@@ -943,106 +875,32 @@ function CounterApp() {
           }}>
             <h3 style={{ textAlign: 'center', margin: '0 0 20px 0' }}>Game Board</h3>
             
-            {/* Row 1 - Yellow Player's Hidden Card with Discard Pile on side */}
+            {/* Row 1 - Yellow Player's Hidden Card */}
             <div style={{ 
               display: 'flex', 
-              justifyContent: 'center',
-              alignItems: 'flex-start',
-              marginBottom: '10px'
+              justifyContent: 'center', 
+              marginBottom: '10px',
+              opacity: playerTeam === 'yellow' ? 1 : 0.3
             }}>
-              {/* Main player card section */}
               <div style={{
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'center',
-                width: '280px', /* Width to match three 80px cards with 20px spaces */
-                opacity: playerTeam === 'yellow' ? 1 : 0.3
-              }}>
-                <div style={{
-                  width: '80px',
-                  height: '100px',
-                  backgroundColor: playerTeam === 'yellow' ? '#FFD700' : '#ddd',
-                  border: '2px solid #333',
-                  borderRadius: '8px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '14px',
-                  fontWeight: 'bold'
-                }}>
-                  {playerTeam === 'yellow' && playerCard ? (
-                    <div>
-                      <div style={{ fontSize: '18px', fontWeight: 'bold' }}>{playerCard.number}</div>
-                      <div style={{ fontSize: '10px' }}>value: {playerCard.value}</div>
-                    </div>
-                  ) : '?'}
-                </div>
-                
-                {playerTeam === 'yellow' && gameState === 'playing' && playerCard && (
-                  <button
-                    onClick={handleDiscardCard}
-                    style={{
-                      marginLeft: '10px',
-                      padding: '8px 12px',
-                      backgroundColor: '#f44336',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '5px',
-                      cursor: 'pointer',
-                      fontSize: '12px'
-                    }}
-                  >
-                    Discard
-                  </button>
-                )}
-              </div>
-              
-              {/* Yellow discard pile on side */}
-              <div style={{
-                width: '120px',
+                width: '80px',
+                height: '100px',
+                backgroundColor: playerTeam === 'yellow' ? '#FFD700' : '#ddd',
+                border: '2px solid #333',
+                borderRadius: '8px',
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
-                marginLeft: '20px'
+                justifyContent: 'center',
+                fontSize: '14px',
+                fontWeight: 'bold'
               }}>
-                <div style={{ 
-                  fontWeight: 'bold',
-                  marginBottom: '5px'
-                }}>Yellow Discards</div>
-                <div style={{
-                  width: '100px',
-                  minHeight: '100px',
-                  border: '1px dashed #FFD700',
-                  borderRadius: '8px',
-                  padding: '5px',
-                  display: 'flex',
-                  flexWrap: 'wrap',
-                  gap: '2px',
-                  justifyContent: 'center'
-                }}>
-                  {board.yellowDiscardPile && board.yellowDiscardPile.map((card, index) => (
-                    <div
-                      key={`yellow-discard-${index}`}
-                      style={{
-                        width: '30px',
-                        height: '40px',
-                        backgroundColor: '#FFD700',
-                        border: '1px solid #333',
-                        borderRadius: '4px',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: '10px',
-                        margin: '2px'
-                      }}
-                    >
-                      <div>{card.number}</div>
-                      <div style={{ fontSize: '8px' }}>{card.value}</div>
-                    </div>
-                  ))}
-                </div>
+                {playerTeam === 'yellow' && playerCard ? (
+                  <div>
+                    <div style={{ fontSize: '18px', fontWeight: 'bold' }}>{playerCard.number}</div>
+                    <div style={{ fontSize: '10px' }}>value: {playerCard.value}</div>
+                  </div>
+                ) : '?'}
               </div>
             </div>
 
@@ -1050,183 +908,97 @@ function CounterApp() {
             <div style={{ 
               display: 'flex', 
               justifyContent: 'center', 
+              gap: '10px',
               marginBottom: '10px'
             }}>
-              <div style={{ 
-                display: 'flex', 
-                justifyContent: 'center', 
-                gap: '10px',
-                width: '100%'
-              }}>
-                {board.yellowSharedCards.map((card, index) => (
-                  <div
-                    key={`yellow-final-${index}`}
-                    onClick={() => handlePlayCard('yellow', index)}
-                    style={{
-                      width: '80px',
-                      height: '100px',
-                      backgroundColor: card.team === 'yellow' ? 
-                        (canPlayCard(card) ? '#FFE135' : '#FFD700') : 
-                        (canPlayCard(card) ? '#FFB3DA' : '#FF69B4'),
-                      border: canPlayCard(card) ? '3px solid #4CAF50' : '2px solid #333',
-                      borderRadius: '8px',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: '14px',
-                      fontWeight: 'bold',
-                      cursor: canPlayCard(card) ? 'pointer' : 'default',
-                      transition: 'all 0.2s'
-                    }}
-                  >
-                    <div style={{ fontSize: '18px' }}>{card.number}</div>
-                    <div style={{ fontSize: '10px' }}>value: {card.value}</div>
-                  </div>
-                ))}
-              </div>
+              {board.yellowSharedCards.map((card, index) => (
+                <div
+                  key={`yellow-${index}`}
+                  onClick={() => handlePlayCard('yellow', index)}
+                  style={{
+                    width: '80px',
+                    height: '100px',
+                    backgroundColor: card.team === 'yellow' ? 
+                      (canPlayCard(card) ? '#FFE135' : '#FFD700') : 
+                      (canPlayCard(card) ? '#FFB3DA' : '#FF69B4'),
+                    border: canPlayCard(card) ? '3px solid #4CAF50' : '2px solid #333',
+                    borderRadius: '8px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '14px',
+                    fontWeight: 'bold',
+                    cursor: canPlayCard(card) ? 'pointer' : 'default',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  <div style={{ fontSize: '18px' }}>{card.number}</div>
+                  <div style={{ fontSize: '10px' }}>value: {card.value}</div>
+                </div>
+              ))}
             </div>
 
             {/* Row 3 - Pink Shared Cards */}
             <div style={{ 
               display: 'flex', 
               justifyContent: 'center', 
+              gap: '10px',
               marginBottom: '10px'
             }}>
-              <div style={{ 
-                display: 'flex', 
-                justifyContent: 'center', 
-                gap: '10px',
-                width: '100%'
-              }}>
-                {board.pinkSharedCards.map((card, index) => (
-                  <div
-                    key={`pink-${index}`}
-                    onClick={() => handlePlayCard('pink', index)}
-                    style={{
-                      width: '80px',
-                      height: '100px',
-                      backgroundColor: card.team === 'pink' ? 
-                        (canPlayCard(card) ? '#FFB3DA' : '#FF69B4') : 
-                        (canPlayCard(card) ? '#FFE135' : '#FFD700'),
-                      border: canPlayCard(card) ? '3px solid #4CAF50' : '2px solid #333',
-                      borderRadius: '8px',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: '14px',
-                      fontWeight: 'bold',
-                      cursor: canPlayCard(card) ? 'pointer' : 'default',
-                      transition: 'all 0.2s'
-                    }}
-                  >
-                    <div style={{ fontSize: '18px' }}>{card.number}</div>
-                    <div style={{ fontSize: '10px' }}>value: {card.value}</div>
-                  </div>
-                ))}
-              </div>
+              {board.pinkSharedCards.map((card, index) => (
+                <div
+                  key={`pink-${index}`}
+                  onClick={() => handlePlayCard('pink', index)}
+                  style={{
+                    width: '80px',
+                    height: '100px',
+                    backgroundColor: card.team === 'pink' ? 
+                      (canPlayCard(card) ? '#FFB3DA' : '#FF69B4') : 
+                      (canPlayCard(card) ? '#FFE135' : '#FFD700'),
+                    border: canPlayCard(card) ? '3px solid #4CAF50' : '2px solid #333',
+                    borderRadius: '8px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '14px',
+                    fontWeight: 'bold',
+                    cursor: canPlayCard(card) ? 'pointer' : 'default',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  <div style={{ fontSize: '18px' }}>{card.number}</div>
+                  <div style={{ fontSize: '10px' }}>value: {card.value}</div>
+                </div>
+              ))}
             </div>
 
-            {/* Row 4 - Pink Player's Hidden Card with Discard Pile on side */}
+            {/* Row 4 - Pink Player's Hidden Card */}
             <div style={{ 
               display: 'flex', 
               justifyContent: 'center',
-              alignItems: 'flex-start'
+              opacity: playerTeam === 'pink' ? 1 : 0.3
             }}>
-              {/* Pink discard pile on side */}
               <div style={{
-                width: '120px',
+                width: '80px',
+                height: '100px',
+                backgroundColor: playerTeam === 'pink' ? '#FF69B4' : '#ddd',
+                border: '2px solid #333',
+                borderRadius: '8px',
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
-                marginRight: '20px'
-              }}>
-                <div style={{ 
-                  fontWeight: 'bold',
-                  marginBottom: '5px'
-                }}>Pink Discards</div>
-                <div style={{
-                  width: '100px',
-                  minHeight: '100px',
-                  border: '1px dashed #FF69B4',
-                  borderRadius: '8px',
-                  padding: '5px',
-                  display: 'flex',
-                  flexWrap: 'wrap',
-                  gap: '2px',
-                  justifyContent: 'center'
-                }}>
-                  {board.pinkDiscardPile && board.pinkDiscardPile.map((card, index) => (
-                    <div
-                      key={`pink-discard-${index}`}
-                      style={{
-                        width: '30px',
-                        height: '40px',
-                        backgroundColor: '#FF69B4',
-                        border: '1px solid #333',
-                        borderRadius: '4px',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: '10px',
-                        margin: '2px'
-                      }}
-                    >
-                      <div>{card.number}</div>
-                      <div style={{ fontSize: '8px' }}>{card.value}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              
-              {/* Main player card section */}
-              <div style={{
-                display: 'flex',
                 justifyContent: 'center',
-                alignItems: 'center',
-                width: '280px', /* Width to match three 80px cards with 20px spaces */
-                opacity: playerTeam === 'pink' ? 1 : 0.3
+                fontSize: '14px',
+                fontWeight: 'bold'
               }}>
-                <div style={{
-                  width: '80px',
-                  height: '100px',
-                  backgroundColor: playerTeam === 'pink' ? '#FF69B4' : '#ddd',
-                  border: '2px solid #333',
-                  borderRadius: '8px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '14px',
-                  fontWeight: 'bold'
-                }}>
-                  {playerTeam === 'pink' && playerCard ? (
-                    <div>
-                      <div style={{ fontSize: '18px', fontWeight: 'bold' }}>{playerCard.number}</div>
-                      <div style={{ fontSize: '10px' }}>value: {playerCard.value}</div>
-                    </div>
-                  ) : '?'}
-                </div>
-                
-                {playerTeam === 'pink' && gameState === 'playing' && playerCard && (
-                  <button
-                    onClick={handleDiscardCard}
-                    style={{
-                      marginLeft: '10px',
-                      padding: '8px 12px',
-                      backgroundColor: '#f44336',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '5px',
-                      cursor: 'pointer',
-                      fontSize: '12px'
-                    }}
-                  >
-                    Discard
-                  </button>
-                )}
+                {playerTeam === 'pink' && playerCard ? (
+                  <div>
+                    <div style={{ fontSize: '18px', fontWeight: 'bold' }}>{playerCard.number}</div>
+                    <div style={{ fontSize: '10px' }}>value: {playerCard.value}</div>
+                  </div>
+                ) : '?'}
               </div>
             </div>
           </div>
