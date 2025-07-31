@@ -1,6 +1,6 @@
 {
-  "short_name": "React App",
-  "name": "Create React App Sample",
+  "short_name": "Danger Danger",
+  "name": "Danger Danger Counter Game",
   "icons": [
     {
       "src": "favicon.ico",

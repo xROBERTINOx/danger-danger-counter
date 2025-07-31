@@ -2,13 +2,22 @@ const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
 const cors = require('cors');
+require('dotenv').config({ path: '../.env' });
 
 const app = express();
+// Apply CORS middleware to Express
+app.use(cors({
+  origin: "*",
+  methods: ["GET", "POST"],
+  credentials: true
+}));
+
 const server = http.createServer(app);
 const io = socketIo(server, {
   cors: {
-    origin: "http://localhost:3000",
-    methods: ["GET", "POST"]
+    origin: process.env.CLIENT_URL || "http://localhost:3000",
+    methods: ["GET", "POST"],
+    credentials: true
   }
 });
 
@@ -424,10 +433,12 @@ io.on('connection', (socket) => {
       return; // Invalid target
     }
     
-    // Check if play is valid (+1 or -1)
+    // Check if play is valid (+1 or -1, or 1-8 swap)
     const playerCard = player.currentCard;
-    if (Math.abs(playerCard.number - targetCard.number) !== 1) {
-      socket.emit('invalid-play', { message: 'Card must be +1 or -1 from target' });
+    if (Math.abs(playerCard.number - targetCard.number) !== 1 && 
+        !((playerCard.number === 1 && targetCard.number === 8) || 
+          (playerCard.number === 8 && targetCard.number === 1))) {
+      socket.emit('invalid-play', { message: 'Card must be +1 or -1 from target, or 1 can be played on 8 (and vice versa)' });
       return;
     }
     
@@ -744,8 +755,7 @@ io.on('connection', (socket) => {
 });
 
 const PORT = 3001;
-server.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-  console.log('Multi-game counter server initialized');
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server running.`);
 });
 

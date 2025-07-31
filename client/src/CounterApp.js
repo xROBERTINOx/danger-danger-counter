@@ -48,7 +48,8 @@ function CounterApp() {
 
   useEffect(() => {
     // Initialize socket connection
-    const newSocket = io('http://localhost:3001');
+    const SERVER_URL = process.env.REACT_APP_SERVER_URL || 'http://localhost:3001';
+    const newSocket = io(SERVER_URL);
     setSocket(newSocket);
 
     console.log('Connecting to server...');
@@ -296,11 +297,20 @@ function CounterApp() {
         board.yellowSharedCards[targetPosition] : 
         board.pinkSharedCards[targetPosition];
       
-      // Check if play is valid
-      if (Math.abs(playerCard.number - targetCard.number) === 1) {
+      // Check if play is valid - matching the same conditions as canPlayCard
+      if (Math.abs(playerCard.number - targetCard.number) === 1 || 
+          (playerCard.number === 1 && targetCard.number === 8) || 
+          (playerCard.number === 8 && targetCard.number === 1)) {
         socket.emit('play-card', { targetRow, targetPosition });
       } else {
-        alert('Invalid play! Card must be +1 or -1 from target.');
+        // Get the card element and add a visual feedback
+        const cardElement = document.querySelector(`.${targetRow}-shared-${targetPosition}`);
+        if (cardElement) {
+          cardElement.classList.add('invalid-move');
+          setTimeout(() => {
+            cardElement.classList.remove('invalid-move');
+          }, 1000);
+        }
       }
     }
   };
@@ -327,7 +337,10 @@ function CounterApp() {
   const canPlayCard = (targetCard) => {
     return gameState === 'playing' && 
            playerCard && 
-           Math.abs(playerCard.number - targetCard.number) === 1 &&
+           (Math.abs(playerCard.number - targetCard.number) === 1 || 
+            // Allow 1 and 8 to be played on each other
+            (playerCard.number === 1 && targetCard.number === 8) || 
+            (playerCard.number === 8 && targetCard.number === 1)) &&
            !((playerTeam === 'yellow' && yellowTeamOut) || (playerTeam === 'pink' && pinkTeamOut));
   };
 
@@ -346,7 +359,7 @@ function CounterApp() {
         margin: '0 auto',
         fontFamily: 'Arial, sans-serif'
       }}>
-        <h1 style={{ textAlign: 'center', color: '#333' }}>Multi-Game Counter App</h1>
+        <h1 style={{ textAlign: 'center', color: '#333' }}>Danger Danger</h1>
         <p style={{ textAlign: 'center', marginBottom: '30px' }}>
           Connection Status: <span style={{ color: isConnected ? 'green' : 'red' }}>
             {isConnected ? 'Connected' : 'Disconnected'}
@@ -762,7 +775,7 @@ function CounterApp() {
           marginBottom: '20px'
         }}>
           <h3 style={{ textAlign: 'center', margin: '0 0 20px 0', color: '#2e7d32' }}>
-            Final Board State - Round {gameState === 'game-ended' ? 'Game' : 'Round'} Over
+            Final Board State 
           </h3>
           
           {/* Row 1 - Yellow Player's Card */}
@@ -903,10 +916,11 @@ function CounterApp() {
             ))}
           </div>
 
-          {/* Row 4 - Pink Player's Card */}
+          {/* Row 4 - Pink Player's Card with Discard Pile */}
           <div style={{ 
             display: 'flex', 
-            justifyContent: 'center'
+            justifyContent: 'space-between',
+            alignItems: 'center'
           }}>
             <div style={{
               width: '80px',
@@ -920,10 +934,58 @@ function CounterApp() {
               justifyContent: 'center',
               fontSize: '14px',
               fontWeight: 'bold',
-              color: '#fff'
+              color: '#fff',
+              margin: 'auto'
             }}>
               <div style={{ fontSize: '18px' }}>{board.pinkPlayerCard.number}</div>
               <div style={{ fontSize: '10px' }}>value: {board.pinkPlayerCard.value}</div>
+            </div>
+            
+            {/* Pink Discard Pile */}
+            <div style={{
+              width: '120px',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              marginRight: '20px'
+            }}>
+              <div style={{ 
+                fontWeight: 'bold',
+                marginBottom: '5px'
+              }}>Pink Discards</div>
+              <div style={{
+                width: '100px',
+                minHeight: '100px',
+                border: '1px dashed #FF69B4',
+                borderRadius: '8px',
+                padding: '5px',
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: '2px',
+                justifyContent: 'center'
+              }}>
+                {board.pinkDiscardPile && board.pinkDiscardPile.map((card, index) => (
+                  <div
+                    key={`pink-discard-${index}`}
+                    style={{
+                      width: '30px',
+                      height: '40px',
+                      backgroundColor: '#FF69B4',
+                      border: '1px solid #333',
+                      borderRadius: '4px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '10px',
+                      margin: '2px'
+                    }}
+                  >
+                    <div>{card.number}</div>
+                    <div style={{ fontSize: '8px' }}>{card.value}</div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>
@@ -1058,6 +1120,7 @@ function CounterApp() {
                 {board.yellowSharedCards.map((card, index) => (
                   <div
                     key={`yellow-final-${index}`}
+                    className={`yellow-shared-${index}`}
                     onClick={() => handlePlayCard('yellow', index)}
                     style={{
                       width: '80px',
@@ -1099,6 +1162,7 @@ function CounterApp() {
                 {board.pinkSharedCards.map((card, index) => (
                   <div
                     key={`pink-${index}`}
+                    className={`pink-shared-${index}`}
                     onClick={() => handlePlayCard('pink', index)}
                     style={{
                       width: '80px',
@@ -1287,7 +1351,7 @@ function CounterApp() {
       )}
 
       {/* Activity Log */}
-      <div>
+      {/* <div>
         <h3>Activity Log</h3>
         <div style={{
           backgroundColor: '#fff3e0',
@@ -1321,7 +1385,7 @@ function CounterApp() {
             ))
           )}
         </div>
-      </div>
+      </div> */}
     </div>
   );
 }
