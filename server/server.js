@@ -50,15 +50,15 @@ function createCard(number, team) {
 
 // Function to initialize game board
 function initializeGameBoard() {
-  // Generate 10 cards for yellow shared cards
+  // Generate 3 cards for yellow shared cards
   const yellowSharedCards = [];
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < 3; i++) {
     yellowSharedCards.push(createCard(getRandomCard(), 'yellow'));
   }
   
-  // Generate 10 cards for pink shared cards
+  // Generate 3 cards for pink shared cards
   const pinkSharedCards = [];
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < 3; i++) {
     pinkSharedCards.push(createCard(getRandomCard(), 'pink'));
   }
   
