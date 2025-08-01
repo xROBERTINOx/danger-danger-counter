@@ -24,18 +24,22 @@ function createCard(number, team) {
 
 // Function to initialize game board
 function initializeGameBoard() {
+  // Generate 10 cards for yellow shared cards
+  const yellowSharedCards = [];
+  for (let i = 0; i < 10; i++) {
+    yellowSharedCards.push(createCard(getRandomCard(), 'yellow'));
+  }
+  
+  // Generate 10 cards for pink shared cards
+  const pinkSharedCards = [];
+  for (let i = 0; i < 10; i++) {
+    pinkSharedCards.push(createCard(getRandomCard(), 'pink'));
+  }
+  
   return {
     yellowPlayerCard: createCard(getRandomCard(), 'yellow'),
-    yellowSharedCards: [
-      createCard(getRandomCard(), 'yellow'),
-      createCard(getRandomCard(), 'yellow'),
-      createCard(getRandomCard(), 'yellow')
-    ],
-    pinkSharedCards: [
-      createCard(getRandomCard(), 'pink'),
-      createCard(getRandomCard(), 'pink'),
-      createCard(getRandomCard(), 'pink')
-    ],
+    yellowSharedCards: yellowSharedCards,
+    pinkSharedCards: pinkSharedCards,
     pinkPlayerCard: createCard(getRandomCard(), 'pink')
   };
 }

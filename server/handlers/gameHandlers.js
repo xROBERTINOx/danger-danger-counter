@@ -163,9 +163,22 @@ function setupGameHandlers(io, socket) {
     const player = gameRoom.players.get(socket.id);
     
     // Check if player is trying to move a card from their team
-    const allowedPositions = player.team === 'yellow' ? 
-      ['yellow-player', 'yellow-shared-0', 'yellow-shared-1', 'yellow-shared-2'] :
-      ['pink-player', 'pink-shared-0', 'pink-shared-1', 'pink-shared-2'];
+    const allowedPositions = [];
+    
+    // Add player card
+    if (player.team === 'yellow') {
+      allowedPositions.push('yellow-player');
+      // Add all 10 shared cards positions
+      for (let i = 0; i < 10; i++) {
+        allowedPositions.push(`yellow-shared-${i}`);
+      }
+    } else {
+      allowedPositions.push('pink-player');
+      // Add all 10 shared cards positions
+      for (let i = 0; i < 10; i++) {
+        allowedPositions.push(`pink-shared-${i}`);
+      }
+    }
     
     if (!allowedPositions.includes(from)) {
       socket.emit('game-error', { message: 'You can only move cards from your team' });

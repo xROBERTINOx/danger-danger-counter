@@ -48,7 +48,8 @@ function CounterApp() {
 
   useEffect(() => {
     // Initialize socket connection
-    const SERVER_URL = process.env.REACT_APP_SERVER_URL || 'http://localhost:3001';
+    // const SERVER_URL = process.env.REACT_APP_SERVER_URL || 'http://localhost:3001';
+    const SERVER_URL = "http://192.168.1.147:3001"
     const newSocket = io(SERVER_URL);
     setSocket(newSocket);
 

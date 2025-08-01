@@ -61,3 +61,53 @@
     transform: translate3d(4px, 0, 0);
   }
 }
+
+.shared-area {
+  display: flex;
+  overflow-x: auto;
+  padding: 10px 0;
+  gap: 5px;
+  width: 100%;
+  max-width: 100%;
+  justify-content: flex-start;
+  scrollbar-width: thin;
+  scrollbar-color: #999 #ddd;
+}
+
+.shared-area::-webkit-scrollbar {
+  height: 8px;
+}
+
+.shared-area::-webkit-scrollbar-track {
+  background: #ddd;
+  border-radius: 4px;
+}
+
+.shared-area::-webkit-scrollbar-thumb {
+  background: #999;
+  border-radius: 4px;
+}
+
+/* Make cards smaller when there are many */
+.shared-area .card {
+  flex-shrink: 0;
+  width: 60px;
+  height: 90px;
+  font-size: 0.9em;
+}
+
+/* Style for card container when many cards are shown */
+.yellow-section, .pink-section {
+  width: 100%;
+  padding: 10px;
+  margin-bottom: 10px;
+  border-radius: 8px;
+}
+
+.yellow-section {
+  background-color: rgba(255, 255, 0, 0.05);
+}
+
+.pink-section {
+  background-color: rgba(255, 105, 180, 0.05);
+}

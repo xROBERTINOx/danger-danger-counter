@@ -15,7 +15,8 @@ app.use(cors({
 const server = http.createServer(app);
 const io = socketIo(server, {
   cors: {
-    origin: process.env.CLIENT_URL || "http://localhost:3000",
+    // origin: process.env.CLIENT_URL || "http://localhost:3000",
+    origin: "http://192.168.1.147:3000 ",
     methods: ["GET", "POST"],
     credentials: true
   }
@@ -49,19 +50,23 @@ function createCard(number, team) {
 
 // Function to initialize game board
 function initializeGameBoard() {
+  // Generate 10 cards for yellow shared cards
+  const yellowSharedCards = [];
+  for (let i = 0; i < 10; i++) {
+    yellowSharedCards.push(createCard(getRandomCard(), 'yellow'));
+  }
+  
+  // Generate 10 cards for pink shared cards
+  const pinkSharedCards = [];
+  for (let i = 0; i < 10; i++) {
+    pinkSharedCards.push(createCard(getRandomCard(), 'pink'));
+  }
+  
   return {
     yellowPlayerCard: createCard(getRandomCard(), 'yellow'),
-    yellowSharedCards: [
-      createCard(getRandomCard(), 'yellow'),
-      createCard(getRandomCard(), 'yellow'),
-      createCard(getRandomCard(), 'yellow')
-    ],
+    yellowSharedCards: yellowSharedCards,
     yellowDiscardPile: [],
-    pinkSharedCards: [
-      createCard(getRandomCard(), 'pink'),
-      createCard(getRandomCard(), 'pink'),
-      createCard(getRandomCard(), 'pink')
-    ],
+    pinkSharedCards: pinkSharedCards,
     pinkDiscardPile: [],
     pinkPlayerCard: createCard(getRandomCard(), 'pink')
   };
