@@ -46,10 +46,11 @@ function CounterApp() {
   const [waitingForNextRound, setWaitingForNextRound] = useState(false);
   const [lastRoundInfo, setLastRoundInfo] = useState(null);
 
+
   useEffect(() => {
     // Initialize socket connection
     // const SERVER_URL = process.env.REACT_APP_SERVER_URL || 'http://localhost:3001';
-    const SERVER_URL = "http://192.168.1.147:3001"
+    const SERVER_URL = "http://localhost:3001"
     const newSocket = io(SERVER_URL);
     setSocket(newSocket);
 
@@ -292,25 +293,33 @@ function CounterApp() {
     socket.emit('player-ready');
   };
 
-  const handlePlayCard = (targetRow, targetPosition) => {
+  const handlePlayCard = (targetRow, targetPosition, isNewStack = false) => {
     if (gameState === 'playing' && playerCard) {
-      const targetCard = targetRow === 'yellow' ? 
-        board.yellowSharedCards[targetPosition] : 
-        board.pinkSharedCards[targetPosition];
-      
-      // Check if play is valid - matching the same conditions as canPlayCard
-      if (Math.abs(playerCard.number - targetCard.number) === 1 || 
-          (playerCard.number === 1 && targetCard.number === 8) || 
-          (playerCard.number === 8 && targetCard.number === 1)) {
-        socket.emit('play-card', { targetRow, targetPosition });
+      if (isNewStack) {
+        // For new stacks, only check if the card has canNewStack ability
+        if (playerCard.canNewStack) {
+          socket.emit('play-card', { targetRow, targetPosition, isNewStack: true });
+        } else {
+          alert('This card cannot create a new stack');
+        }
       } else {
-        // Get the card element and add a visual feedback
-        const cardElement = document.querySelector(`.${targetRow}-shared-${targetPosition}`);
-        if (cardElement) {
-          cardElement.classList.add('invalid-move');
-          setTimeout(() => {
-            cardElement.classList.remove('invalid-move');
-          }, 1000);
+        // Regular card play logic (your existing code)
+        const targetCard = targetRow === 'yellow' ? 
+          board.yellowSharedCards[targetPosition] : 
+          board.pinkSharedCards[targetPosition];
+        
+        if (Math.abs(playerCard.number - targetCard.number) === 1 || 
+            (playerCard.number === 1 && targetCard.number === 8) || 
+            (playerCard.number === 8 && targetCard.number === 1)) {
+          socket.emit('play-card', { targetRow, targetPosition, isNewStack: false });
+        } else {
+          const cardElement = document.querySelector(`.${targetRow}-shared-${targetPosition}`);
+          if (cardElement) {
+            cardElement.classList.add('invalid-move');
+            setTimeout(() => {
+              cardElement.classList.remove('invalid-move');
+            }, 1000);
+          }
         }
       }
     }
@@ -350,6 +359,110 @@ function CounterApp() {
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
+
+  const canCreateNewStack = () => {
+    return gameState === 'playing' && 
+      playerCard && 
+      playerCard.canNewStack &&
+      !((playerTeam === 'yellow' && yellowTeamOut) || (playerTeam === 'pink' && pinkTeamOut));
+  }; 
+
+  const renderCard = (card, onClick, isClickable, className, key) => {
+    return (
+      <div
+        key={key}
+        className={className}
+        onClick={onClick}
+        style={{
+          width: '80px',
+          height: '100px',
+          backgroundColor: card.team === 'yellow' ? 
+            (isClickable ? '#FFE135' : '#FFD700') : 
+            (isClickable ? '#FFB3DA' : '#FF69B4'),
+          border: isClickable ? '3px solid #4CAF50' : '2px solid #333',
+          borderRadius: '8px',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: '14px',
+          fontWeight: 'bold',
+          cursor: isClickable ? 'pointer' : 'default',
+          transition: 'all 0.2s',
+          color: card.team === 'pink' ? '#fff' : '#000'
+        }}
+      >
+        <div style={{ fontSize: '18px' }}>{card.number}</div>
+        <div style={{ fontSize: '10px' }}>value: {card.value}</div>
+        {card.canNewStack && (
+          <div style={{ 
+            fontSize: '8px', 
+            marginTop: '2px',
+            fontWeight: 'normal'
+          }}>
+            new stack
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderNewStackButtons = (targetRow) => {
+    if (!canCreateNewStack()) return null;
+    
+    return (
+      <>
+        {/* Left new stack button */}
+        <div
+          onClick={() => handlePlayCard(targetRow, 'left', true)}
+          style={{
+            width: '60px',
+            height: '80px',
+            backgroundColor: '#90EE90',
+            border: '2px dashed #4CAF50',
+            borderRadius: '8px',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '12px',
+            fontWeight: 'bold',
+            cursor: 'pointer',
+            marginRight: '10px'
+          }}
+        >
+          <div>+</div>
+          <div style={{ fontSize: '8px' }}>New Stack</div>
+          <div style={{ fontSize: '8px' }}>Left</div>
+        </div>
+        
+        {/* Right new stack button */}
+        <div
+          onClick={() => handlePlayCard(targetRow, 'right', true)}
+          style={{
+            width: '60px',
+            height: '80px',
+            backgroundColor: '#90EE90',
+            border: '2px dashed #4CAF50',
+            borderRadius: '8px',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '12px',
+            fontWeight: 'bold',
+            cursor: 'pointer',
+            marginLeft: '10px'
+          }}
+        >
+          <div>+</div>
+          <div style={{ fontSize: '8px' }}>New Stack</div>
+          <div style={{ fontSize: '8px' }}>Right</div>
+        </div>
+      </>
+    );
+  };
+
 
   // Login screen
   if (!hasJoined) {
@@ -858,64 +971,46 @@ function CounterApp() {
             <div style={{ 
               display: 'flex', 
               justifyContent: 'center', 
-              gap: '10px',
-              flex: 1
+              alignItems: 'center',
+              marginBottom: '10px'
             }}>
-              {board.yellowSharedCards.map((card, index) => (
-                <div
-                  key={`yellow-final-${index}`}
-                  style={{
-                    width: '80px',
-                    height: '100px',
-                    backgroundColor: card.team === 'yellow' ? '#FFD700' : '#FF69B4',
-                    border: '2px solid #333',
-                    borderRadius: '8px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '14px',
-                    fontWeight: 'bold',
-                    color: card.team === 'yellow' ? '#000' : '#fff'
-                  }}
-                >
-                  <div style={{ fontSize: '18px' }}>{card.number}</div>
-                  <div style={{ fontSize: '10px' }}>value: {card.value}</div>
-                </div>
-              ))}
+              {renderNewStackButtons('yellow')}
+              <div style={{ display: 'flex', gap: '10px' }}>
+                {board.yellowSharedCards.map((card, index) => 
+                  renderCard(
+                    card,
+                    () => handlePlayCard('yellow', index),
+                    canPlayCard(card),
+                    `yellow-shared-${index}`,
+                    `yellow-${index}`
+                  )
+                )}
+              </div>
+              {renderNewStackButtons('yellow')}
             </div>
           </div>
 
           {/* Row 3 - Pink Shared Cards */}
-          <div style={{ 
-            display: 'flex', 
-            justifyContent: 'center', 
-            gap: '10px',
-            marginBottom: '10px'
-          }}>
-            {board.pinkSharedCards.map((card, index) => (
-              <div
-                key={`pink-final-${index}`}
-                style={{
-                  width: '80px',
-                  height: '100px',
-                  backgroundColor: card.team === 'pink' ? '#FF69B4' : '#FFD700',
-                  border: '2px solid #333',
-                  borderRadius: '8px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '14px',
-                  fontWeight: 'bold',
-                  color: card.team === 'pink' ? '#fff' : '#000'
-                }}
-              >
-                <div style={{ fontSize: '18px' }}>{card.number}</div>
-                <div style={{ fontSize: '10px' }}>value: {card.value}</div>
-              </div>
-            ))}
+         <div style={{ 
+          display: 'flex', 
+          justifyContent: 'center', 
+          alignItems: 'center',
+          marginBottom: '10px'
+        }}>
+          {renderNewStackButtons('pink')}
+          <div style={{ display: 'flex', gap: '10px' }}>
+            {board.pinkSharedCards.map((card, index) => 
+              renderCard(
+                card,
+                () => handlePlayCard('pink', index),
+                canPlayCard(card),
+                `pink-shared-${index}`,
+                `pink-${index}`
+              )
+            )}
           </div>
+          {renderNewStackButtons('pink')}
+        </div>
 
           {/* Row 4 - Pink Player's Card with Discard Pile */}
           <div style={{ 
@@ -1035,6 +1130,9 @@ function CounterApp() {
                     <div>
                       <div style={{ fontSize: '18px', fontWeight: 'bold' }}>{playerCard.number}</div>
                       <div style={{ fontSize: '10px' }}>value: {playerCard.value}</div>
+                      {playerCard.canNewStack && (
+                        <div style={{ fontSize: '8px', marginTop: '2px' }}>new stack</div>
+                      )}
                     </div>
                   ) : '?'}
                 </div>
@@ -1350,43 +1448,6 @@ function CounterApp() {
           </div>
         </>
       )}
-
-      {/* Activity Log */}
-      {/* <div>
-        <h3>Activity Log</h3>
-        <div style={{
-          backgroundColor: '#fff3e0',
-          border: '1px solid #ffb74d',
-          borderRadius: '5px', 
-          maxHeight: '200px',
-          overflowY: 'auto',
-          padding: '10px'
-        }}>
-          {logs.length === 0 ? (
-            <p style={{ color: '#666', fontStyle: 'italic' }}>No activity yet...</p>
-          ) : (
-            logs.map((log) => (
-              <div key={log.id} style={{
-                padding: '5px',
-                borderBottom: '1px solid #ffe0b2',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                fontSize: '14px'
-              }}>
-                <span>
-                  <strong style={{ color: log.team === 'yellow' ? '#FFD700' : '#FF69B4' }}>
-                    {log.username}
-                  </strong> {log.action}
-                </span>
-                <span style={{ color: '#666', fontSize: '12px' }}>
-                  {log.timestamp}
-                </span>
-              </div>
-            ))
-          )}
-        </div>
-      </div> */}
     </div>
   );
 }

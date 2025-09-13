@@ -16,7 +16,7 @@ const server = http.createServer(app);
 const io = socketIo(server, {
   cors: {
     // origin: process.env.CLIENT_URL || "http://localhost:3000",
-    origin: "http://192.168.1.147:3000 ",
+    origin: "http://localhost:3000 ",
     methods: ["GET", "POST"],
     credentials: true
   }
@@ -39,12 +39,20 @@ function getRandomCardValue() {
   return 10;
 }
 
+// Function to determine if can new stack (true: 25%, false: 75%)
+function getRandomCanNewStack() {
+  const rand = Math.random();
+  if (rand <= 0.25) return true;
+  return false;
+}
+
 // Function to create a card object
-function createCard(number, team) {
+function createCard(team) {
   return {
-    number: number,
+    number: getRandomCard(),
     value: getRandomCardValue(),
-    team: team
+    team: team,
+    canNewStack: getRandomCanNewStack()
   };
 }
 
@@ -53,22 +61,22 @@ function initializeGameBoard() {
   // Generate 3 cards for yellow shared cards
   const yellowSharedCards = [];
   for (let i = 0; i < 3; i++) {
-    yellowSharedCards.push(createCard(getRandomCard(), 'yellow'));
+    yellowSharedCards.push(createCard('yellow'));
   }
   
   // Generate 3 cards for pink shared cards
   const pinkSharedCards = [];
   for (let i = 0; i < 3; i++) {
-    pinkSharedCards.push(createCard(getRandomCard(), 'pink'));
+    pinkSharedCards.push(createCard('pink'));
   }
   
   return {
-    yellowPlayerCard: createCard(getRandomCard(), 'yellow'),
+    yellowPlayerCard: createCard('yellow'),
     yellowSharedCards: yellowSharedCards,
     yellowDiscardPile: [],
     pinkSharedCards: pinkSharedCards,
     pinkDiscardPile: [],
-    pinkPlayerCard: createCard(getRandomCard(), 'pink')
+    pinkPlayerCard: createCard('pink')
   };
 }
 
@@ -275,7 +283,7 @@ io.on('connection', (socket) => {
     gameRoom.players.set(socket.id, {
       username: username,
       team: 'yellow',
-      currentCard: createCard(getRandomCard(), 'yellow'),
+      currentCard: createCard('yellow'),
       isReady: false
     });
     
@@ -331,7 +339,7 @@ io.on('connection', (socket) => {
     gameRoom.players.set(socket.id, {
       username: username,
       team: assignedTeam,
-      currentCard: createCard(getRandomCard(), assignedTeam),
+      currentCard: createCard(assignedTeam),
       isReady: false
     });
     
@@ -413,7 +421,7 @@ io.on('connection', (socket) => {
 
   socket.on('play-card', (data) => {
     const gameId = socket.gameId;
-    const { targetPosition, targetRow } = data; // targetPosition: 0-2, targetRow: 'yellow' or 'pink'
+    const { targetPosition, targetRow, isNewStack } = data; // Add isNewStack parameter
     
     if (!gameId || !gameRooms.has(gameId)) return;
     
@@ -428,36 +436,61 @@ io.on('connection', (socket) => {
       return;
     }
     
-    // Get target card value
-    let targetCard;
-    if (targetRow === 'yellow') {
-      targetCard = gameRoom.board.yellowSharedCards[targetPosition];
-    } else if (targetRow === 'pink') {
-      targetCard = gameRoom.board.pinkSharedCards[targetPosition];
-    } else {
-      return; // Invalid target
-    }
-    
-    // Check if play is valid (+1 or -1, or 1-8 swap)
     const playerCard = player.currentCard;
-    if (Math.abs(playerCard.number - targetCard.number) !== 1 && 
-        !((playerCard.number === 1 && targetCard.number === 8) || 
-          (playerCard.number === 8 && targetCard.number === 1))) {
-      socket.emit('invalid-play', { message: 'Card must be +1 or -1 from target, or 1 can be played on 8 (and vice versa)' });
+    
+    // If this is a new stack, check if the card has canNewStack ability
+    if (isNewStack && !playerCard.canNewStack) {
+      socket.emit('invalid-play', { message: 'This card cannot create a new stack' });
       return;
     }
     
-    // Make the play - the new card keeps the player's team color
-    const newCard = createCard(playerCard.number, player.team);
-    
-    if (targetRow === 'yellow') {
-      gameRoom.board.yellowSharedCards[targetPosition] = newCard;
+    if (isNewStack) {
+      // Handle new stack creation
+      const newCard = createCard(playerCard.team);
+      newCard.number = playerCard.number;
+      newCard.value = playerCard.value;
+      newCard.canNewStack = playerCard.canNewStack;
+      
+      // Add to the appropriate row
+      if (targetRow === 'yellow') {
+        gameRoom.board.yellowSharedCards.push(newCard);
+      } else if (targetRow === 'pink') {
+        gameRoom.board.pinkSharedCards.push(newCard);
+      }
     } else {
-      gameRoom.board.pinkSharedCards[targetPosition] = newCard;
+      // Original card placement logic
+      let targetCard;
+      if (targetRow === 'yellow') {
+        targetCard = gameRoom.board.yellowSharedCards[targetPosition];
+      } else if (targetRow === 'pink') {
+        targetCard = gameRoom.board.pinkSharedCards[targetPosition];
+      } else {
+        return; // Invalid target
+      }
+      
+      // Check if play is valid (+1 or -1, or 1-8 swap)
+      if (Math.abs(playerCard.number - targetCard.number) !== 1 && 
+          !((playerCard.number === 1 && targetCard.number === 8) || 
+            (playerCard.number === 8 && targetCard.number === 1))) {
+        socket.emit('invalid-play', { message: 'Card must be +1 or -1 from target, or 1 can be played on 8 (and vice versa)' });
+        return;
+      }
+      
+      // Make the play - the new card keeps the player's team color
+      const newCard = createCard(player.team);
+      newCard.number = playerCard.number;
+      newCard.value = playerCard.value;
+      newCard.canNewStack = playerCard.canNewStack;
+      
+      if (targetRow === 'yellow') {
+        gameRoom.board.yellowSharedCards[targetPosition] = newCard;
+      } else {
+        gameRoom.board.pinkSharedCards[targetPosition] = newCard;
+      }
     }
     
     // Give player a new card
-    player.currentCard = createCard(getRandomCard(), player.team);
+    player.currentCard = createCard(player.team);
     
     // Calculate current scores
     const currentScores = calculateTeamScores(gameRoom.board);
@@ -469,7 +502,9 @@ io.on('connection', (socket) => {
       id: Date.now(),
       username: player.username,
       team: player.team,
-      action: `played ${player.team} ${playerCard.number} (value: ${playerCard.value}) on ${targetRow} row position ${targetPosition + 1}`,
+      action: isNewStack ? 
+        `created new stack with ${player.team} ${playerCard.number} (value: ${playerCard.value}) on ${targetRow} row` :
+        `played ${player.team} ${playerCard.number} (value: ${playerCard.value}) on ${targetRow} row position ${targetPosition + 1}`,
       timestamp: new Date().toLocaleTimeString()
     };
     
@@ -485,7 +520,8 @@ io.on('connection', (socket) => {
       playerId: socket.id,
       newPlayerCard: playerCard, // The card that was played
       yellowCurrentPoints: gameRoom.yellowCurrentPoints,
-      pinkCurrentPoints: gameRoom.pinkCurrentPoints
+      pinkCurrentPoints: gameRoom.pinkCurrentPoints,
+      isNewStack: isNewStack
     });
     
     // Send new card only to the player who played
@@ -517,7 +553,7 @@ io.on('connection', (socket) => {
     }
     
     // Give player a new card
-    player.currentCard = createCard(getRandomCard(), player.team);
+    player.currentCard = createCard(player.team);
     
     // Calculate current scores (discard points go to the opponent)
     const currentScores = calculateTeamScores(gameRoom.board);
@@ -634,7 +670,7 @@ io.on('connection', (socket) => {
       
       // Give each player a new card
       gameRoom.players.forEach((player, playerId) => {
-        player.currentCard = createCard(getRandomCard(), player.team);
+        player.currentCard = createCard(player.team);
         player.isReady = false; // Reset for game
       });
       
